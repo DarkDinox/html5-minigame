@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>MiHTMLFive</title>
+
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
+
+	<script type="text/javascript">
+		$(document).ready(function(){  //Al Iniciar
+			////////////////////////////
+			///Declaración de Variables/
+			////////////////////////////
+			var canvas = $("#myCanvas")[0]; 
+			var cWidth = $("#myCanvas").width();
+			var cHeight = $("#myCanvas").height();
+			var ctx = canvas.getContext("2d");
+			var timer = 0;
+			var logo = new Image(); //Cargar con solo JS
+			var pAnim = true;
+			var score = 0;
+			//var MAX_NPCS = 2; Luego lo usare
+			var spawnNPC = 10;
+			var NPCnum = 0;
+			var GameState = "Begin";
+
+			///DIBUJANDO ENEMIGOS
+			var spr_enemy, spr_player;
+			var spr_coin;
+			spr_enemy = new Image();
+			spr_player = new Image();
+			spr_coin = new Image();
+
+			spr_enemy.src = 'enemigo.png';
+			spr_player.src = 'player.png';
+			spr_coin.src = 'coin.PNG';
+			////////////////////////////////
+			///Declaración de Enumeraciones/
+			////////////////////////////////
+			if(GameState == "Begin"){
+			var Player = { //Como un PlayerREC
+			dir: null, //En vez de nullstring es null
+			posX:(cWidth/2)-7,
+			posY:(cHeight/2)-7,
+			width:30,
+			height:30
+			}; //Var JSON guarda cualquier tipo de var
+
+			var Coin = { //CoinRec
+			draw: false,
+			posX: 0,
+			posY: 0,
+			width: 25,
+			height: 25
+			};
+
+			var NPC = new Array(12); //Array ENUM con Index
+			for(i = 0; i < NPC.length; i++){ //Esto es un FOR
+				if(i%2 == 0){
+				NPC[i] = {
+					draw: false,
+					velocity: 0,
+					dir: "dir_right",
+					posX:0,
+					posY: 0,
+					width: 30,
+					height: 20
+				};
+				}else{
+					NPC[i] = {
+					draw: false,
+					velocity: 0,
+					dir: "dir_right",
+					posX:cWidth-30,
+					posY: cHeight-20,
+					width: 30,
+					height: 20
+				};
+				}
+			} //NEXT
+
+			var projectile = new Array(12);
+
+			for(var i = 0;i < projectile.length;i++){
+				if(i%2 == 0){
+					projectile[i] = {
+						draw: false,
+						dir: "dir_down",
+						timer: 0,
+						velocity: 8,
+						posX: 0,
+						posY: 0,
+						width: 20,
+						height: 5
+					};
+				}else{
+					projectile[i] = {
+						draw: false,
+						dir: "dir_up",
+						timer: 0,
+						velocity: 8,
+						posX: cWidth-20,
+						posY: cHeight-5,
+						width: 20,
+						height: 5
+					};
+				}
+			}
+
+			}
+			////////////////////////
+			///Inicio del GAME LOOP/
+			////////////////////////
+			if (typeof game_loop != "undefined"){
+				clearInterval(game_loop);
+			}
+			var game_loop = setInterval(doEvents,30);
+
+			if (typeof tmr500 != "undefined"){
+				clearInterval(tmr500);
+			}
+			var tmr500 = setInterval(doEvents25,50);
+			//var tmr25 = setInterval(doLoop25,25)
+
+			$(document).keydown(function(event){ //Al presionar una tecla se ejecuta eveno
+				var KeyAscii = event.which; //.wich detecta el valor de la tecla
+				switch(KeyAscii){
+					case 39:
+						Player.dir = "dir_right"
+						break;
+					case 37:
+						Player.dir = "dir_left"
+						break;
+					case 38:
+						Player.dir = "dir_up"
+						break;
+					case 40:
+						Player.dir = "dir_down"
+						break;
+					case 82:
+						if(GameState == "Over" || GameState == "Win"){
+								ResetGame();
+							}
+						break;
+				}
+			})
+
+			function doEvents(){
+				setBackground();
+				drawScore();
+				if(GameState == "Begin"){ //Si el juego ha iniciado arrancamos
+					CoinTimer();
+					CoinRandom();
+					checkCollision();
+					CoinCollision();
+					increaseNPC();
+					PlayerMove();
+					NPCMove();
+					drawPlayer();
+					drawNPC(NPCnum); //Dandole un valor
+					drawCoin();
+					Projectile();
+					destroyProjectile(0);
+					ProjectileMove();
+					drawProjectile();
+				}else if(GameState == "Over"){
+					drawGameOver();
+				}else if(GameState == "Win"){
+					drawGameWin();
+				}
+			}
+
+			function doEvents25(){
+					destroyProjectile(1);
+			}
+
+			function setBackground(){
+				ctx.save();
+				ctx.fillStyle = "white";
+				ctx.fillRect(0,0,cWidth,cHeight);
+
+				ctx.strokeStyle = "black"; //Borde del Canvas
+				ctx.strokeRect(0,0,cWidth,cHeight);
+				ctx.restore();
+			}
+
+			setBackground();
+			//pacmanAnimation();
+			drawPlayer();
+
+			function drawPlayer(){
+				ctx.drawImage(spr_player,Player.posX,Player.posY,Player.width,Player.height);
+			}
+
+			function drawNPC(index){
+				//ctx.save(); //Si tenemos muchos enemigos usar esto fuera del FOR
+				for(var i = 0; i < index; i++){ //FOR
+					if(NPC[i].draw){
+					ctx.drawImage(spr_enemy,NPC[i].posX,NPC[i].posY);
+					}
+				}
+				//ctx.restore();
+			}
+
+			function drawCoin(){
+				if(Coin.draw){
+					ctx.drawImage(spr_coin,Coin.posX,Coin.posY,Coin.width,Coin.height);
+
+					if(timer > 80){
+						Coin.draw = false;
+					}
+				}
+			}
+
+			function destroyProjectile(destroyPJ){
+				
+				for(var i = 0; i < projectile.length; i++){ //For
+				if(destroyPJ == 0){
+				if(projectile[i].posY < 5 && projectile[i].dir == "dir_up"){
+					projectile[i].posY = cHeight-5;
+					projectile[i].draw = false;
+				}
+				else if(projectile[i].posY + projectile[i].height >= cHeight - 5 && projectile[i].dir == "dir_down"){
+					projectile[i].posY = 0;
+					projectile[i].draw = false;
+				}
+
+				}else{
+
+				if (Player.posX < projectile[i].posX + projectile[i].width  &&
+					Player.posX + Player.width  > projectile[i].posX &&
+					Player.posY < projectile[i].posY + projectile[i].height &&
+					Player.posY + Player.height > projectile[i].posY) {
+						if(Player.width == 90){
+							GameState = "Over"; //Perdemos el juego
+							}else{
+								Player.width += 5;
+								Player.height +=5;
+						}
+				}
+				}
+			}
+			}
+
+			function ProjectileMove(){
+			for(var i = 0; i < projectile.length; i++){
+			if(projectile[i].draw){ //Previene el lanzamiento desde su misma instancia
+			switch(projectile[i].dir){ //Asi se hace un Select Case - Switch
+				case "dir_up":
+					if(projectile[i].posY > 490){
+					projectile[i].posX = NPC[i].posX
+					}
+					projectile[i].posY -= 5;
+					break;
+				case "dir_down":
+					if(projectile[i].posY < 5){
+					projectile[i].posX = NPC[i].posX
+					}
+					projectile[i].posY += 5;
+					break;
+				}
+			}
+		}
+			}
+
+			function drawProjectile(){
+			ctx.save();
+			for(var i = 0; i < projectile.length; i++){
+				if(projectile[i].draw){
+				ctx.fillStyle = "blue";
+				ctx.fillRect(projectile[i].posX,projectile[i].posY,projectile[i].width,projectile[i].height);
+				}
+			ctx.restore();
+			}
+			}
+
+
+			function Projectile(){
+				for(var i = 0; i < projectile.length; i++){
+					if(NPC[i].draw){
+						projectile[i].timer++;
+						if(projectile[i].timer > 65){
+							projectile[i].draw = true;
+							projectile[i].timer = 0;
+						}
+					}
+				}
+			}
+
+			function increaseNPC(){
+				if(/*spawnNPC < score &&*/ NPCnum < NPC.length){
+					NPC[NPCnum].velocity = Math.floor((Math.random()*10)+1);
+					NPC[NPCnum].draw = true;
+					NPCnum++;
+					spawnNPC += 10;
+				}	
+			}
+
+			function drawGameOver(){
+				var texto = "GAME OVER"; //variables locales
+				ctx.font = "35px Arial";
+				ctx.fillStyle = "black";
+				ctx.fillText(texto, 140, 150);
+			}
+
+			function drawGameWin(){
+				var texto = "FELICIDADES GANASTE"; //variables locales
+				ctx.font = "35px Arial";
+				ctx.fillStyle = "black";
+				ctx.fillText(texto, 50, 150);
+			}
+
+			function drawScore(){
+				var text = "Score: " + score; //variables locales
+				if(GameState == "Begin"){
+					ctx.font = "20px Arial";
+					ctx.fillStyle = "black";
+					ctx.fillText(text, 400, 490);
+				}else if(GameState == "Over"){
+					text = "Score: " + score + " Presiona R para reiniciar.";
+					ctx.font = "20px Arial";
+					ctx.fillStyle = "black";
+					ctx.fillText(text, 100, 230);
+				}else if(GameState == "Win"){
+					text = "Score: " + score + " Presiona R para reiniciar.";
+					ctx.font = "20px Arial";
+					ctx.fillStyle = "black";
+					ctx.fillText(text, 100, 230);
+				}
+			}
+
+			function PlayerMove(){
+
+			switch(Player.dir){ //Asi se hace un Select Case - Switch
+				case "dir_right": // No olvidar colocar el : al final del case
+					Player.posX += 10;
+					break;
+				case "dir_left":
+					Player.posX -= 10;
+					break;
+				case "dir_up":
+					Player.posY -= 10;
+					break;
+				case "dir_down":
+					Player.posY += 10;
+					break;
+				default: // Case Else
+					Player.posX = Player.posX;
+					Player.posY = Player.posY;
+				}
+			}
+
+			function NPCMove(){
+
+			for(var i = 0; i < NPC.length; i++){
+				switch(NPC[i].dir){ //Asi se hace un Select Case - Switch
+				case "dir_right": // No olvidar colocar el : al final del case
+					NPC[i].posX += NPC[i].velocity;
+					break;
+				case "dir_left":
+					NPC[i].posX -= NPC[i].velocity;
+					break;
+				case "dir_up":
+					NPC[i].posY -= NPC[i].velocity;
+					break;
+				case "dir_down":
+					NPC[i].posY += NPC[i].velocity;
+					break;
+				default: // Case Else
+					NPC[i].posX = NPC[i].posX;
+					NPC[i].posY = NPC[i].posY;
+				}
+			}
+			}
+
+			function checkCollision(){
+
+				//Colisión de Players
+
+				if(Player.posY < 5 && Player.dir == "dir_up"){ // && = And - No olvides ==
+					Player.posY = 0;
+					Player.dir = null;
+				}
+				else if(Player.posX < 5 && Player.dir == "dir_left"){
+					Player.posX = 0;
+					Player.dir = null;
+				}
+				else if(Player.posY + Player.height >= cHeight - 5 && Player.dir == "dir_down"){
+					Player.posY = cHeight - Player.height;
+					Player.dir = null;
+				}
+				else if(Player.posX + Player.width >= cWidth - 5 && Player.dir == "dir_right"){
+					Player.posX = cWidth - Player.width; //Restamos a nuestro jugador
+					Player.dir = null;
+				}
+
+				//Colisión de NPCS
+				for(var i = 0; i < NPC.length; i++){ //For
+
+				if(NPC[i].posY < 5 && NPC[i].dir == "dir_up"){ // && = And - No olvides ==
+					NPC[i].posY = 0;
+					NPC[i].dir = "dir_down";
+				}
+				else if(NPC[i].posX < 5 && NPC[i].dir == "dir_left"){
+					NPC[i].posX = 0;
+					NPC[i].dir = "dir_right";
+				}
+				else if(NPC[i].posY + NPC[i].height >= cHeight - 5 && NPC[i].dir == "dir_down"){
+					NPC[i].posY = cHeight - NPC[i].height;
+					NPC[i].dir = "dir_up";
+				}
+				else if(NPC[i].posX + NPC[i].width >= cWidth - 5 && NPC[i].dir == "dir_right"){
+					NPC[i].posX = cWidth - NPC[i].width; //Restamos a nuestro jugador
+					NPC[i].dir = "dir_left";
+				}
+
+				} // Next
+			}
+
+			function CoinCollision(){ //Aprendiendo a hacer collisiones con graficos
+				if(Coin.draw && 
+					Player.posX + Player.width > Coin.posX &&
+					Player.posX < Coin.posX + Coin.width &&
+					Player.posY < Coin.posY + Coin.height &&
+					Player.posY + Player.height > Coin.posY
+					){
+					Coin.draw = false;
+					score = score + 10;
+					
+					if(score >= 250){
+						GameState = "Win";
+					}
+
+					if(Player.width > 30 && Player.height > 30){
+						Player.width -= 5;
+						Player.height -=5;
+					}
+				}
+			}
+
+			function CoinRandom(){
+				if(!Coin.draw && Math.floor((Math.random()*400)+1) < 4){ //!Bool significa Falso
+					Coin.posX = Math.floor(Math.random()*(cWidth-Coin.width));
+					Coin.posY = Math.floor(Math.random()*(cHeight-Coin.height));
+					Coin.draw = true;
+				}
+			}
+
+			function CoinTimer(){
+				if(Coin.draw){
+					timer++;
+				}else{
+					timer = 0;
+				}
+			}
+
+			function ResetGame(){
+				Player.posX = (cWidth/2)-7;
+				Player.posY = (cHeight/2)-7;
+				Player.dir = null;
+				Player.width = 30;
+				Player.height = 30;
+				score = 0;
+				GameState = "Begin";
+			}
+
+			//function setPlayer(color, x, y, width, height){
+			//	ctx.save();
+			//	ctx.fillStyle = color;
+			//	ctx.fillRect(x,y,width,height) ;
+			//	ctx.restore();
+			//}
+
+			//setBackground();
+
+			//setPlayer("red",10,470,20,20);
+			//setPlayer("blue",470,470,20,20);
+
+			function degreesToRadian(dreg){
+				return(dreg * Math.PI)/180;
+			}
+
+			function pacmanAnimation(){ //Animación de PACMAN
+			ctx.save();
+			ctx.beginPath();
+			if(!pAnim){
+				ctx.arc(250,175,60,degreesToRadian(40),degreesToRadian(320),false);
+				ctx.lineTo(250,175);
+				ctx.lineTo(296,213);
+				pAnim = true;
+			}else{
+				ctx.arc(250,175,60,degreesToRadian(0),degreesToRadian(360),false);
+				ctx.lineTo(250,175);
+				pAnim = false;
+			}
+
+			ctx.closePath();
+			ctx.fillStyle = "yellow"
+			ctx.fill();
+
+			ctx.lineWidth = 2; //Linea de Pacman
+			ctx.strokeStyle = "black";
+			ctx.stroke();
+
+			ctx.fillStyle = "black";
+			ctx.beginPath();
+			ctx.arc(240,135,10,degreesToRadian(0),degreesToRadian(360),false);
+			ctx.fill();
+			ctx.closePath();
+			ctx.restore();
+
+		}
+			//logo.onload = function(){ //Dibujamos la imagen al cargar Canvas
+				//ctx.drawImage(logo,70,70); 
+			//}
+
+			//logo.src = "logo.png";
+
+			//ctx.arc(200,200,30,degreesToRadian(0),degreesToRadian(360),false);
+			//ctx.closePath();
+			//ctx.stroke(); //Se debe definir un Path siempre o Fill
+		}) 
+	</script>
+</head>
+
+<body>
+
+	<canvas id="myCanvas" width="500" height="500">¿Por qué no usas CHROME?</canvas>
+	<!--<img id="logo" alt="logo" src="logo.png" style="visibility: hidden;"/>-->
+</body>
+</html>
